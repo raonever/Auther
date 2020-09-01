@@ -4,7 +4,7 @@ const express = require("express");         // 1-1) express, bady-parser, ejs np
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const encrypt = require("mongoose-encryption");
+const md5 = require("md5");
 
 const app = express();    // 1-2) app 선언, ejs 셋팅, bodyParser, express 설정
 
@@ -19,13 +19,10 @@ mongoose.connect("mongodb://localhost:27017/userDB", {
   useUnifiedTopology: true
 });
 
-const userSchema = new mongoose.Schema ({   // 데이터 베이스 스키마 설정
+const userSchema = new mongoose.Schema ({
   email: String,
   password: String
 });
-
-// sceret 변수를 .env로 이동. .env는 띄어쓰기, ""(따옴표), ;(세미콜론) 를 사용하지 않음
-userSchema.plugin(encrypt, { secret: process.env.SECRET, encryptedFields: ['password'] });
 
 const User = new mongoose.model("User", userSchema);
 
@@ -44,10 +41,10 @@ app.get("/register", function(req,res){
 app.post("/register", function(req, res){
   const newUser = new User({
     email: req.body.username,
-    password: req.body.password
+    password: md5(req.body.password)      // 암호화
   });
 
-  newUser.save(function(err){     // save할 때 암호화
+  newUser.save(function(err){
     if (err) {
       console.log(err);
     } else {
@@ -58,7 +55,7 @@ app.post("/register", function(req, res){
 
 app.post("/login", function(req, res){
   const username = req.body.username;
-  const password = req.body.password;
+  const password = md5(req.body.password);    // 복호화
 
   User.findOne({email: username}, function(err, foundUser){   // 찾을 때 복호화
     if (err){
