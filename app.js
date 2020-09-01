@@ -7,6 +7,8 @@ const mongoose = require("mongoose");
 const session = require("express-session");   // 1) Passport setting (Line 7~9)
 const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
+const GoogleStrategy = require('passport-google-oauth20').Strategy;  // OAuth 1.
+const findOrCreate = require('mongoose-findorcreate');              // OAuth 추가1.
 
 const app = express();
 
@@ -33,21 +35,58 @@ mongoose.set("useCreateIndex", true);  // 7) 버전업으로 인해 추가된 �
 
 const userSchema = new mongoose.Schema ({
   email: String,
-  password: String
+  password: String,
+  googleId: String                      // OAuth 추가4.
 });
 
 userSchema.plugin(passportLocalMongoose);     // 4) 스키마에 passportLocalMongoose 플러그인 추가
+userSchema.plugin(findOrCreate);          // OAuth 추가2.
 
 const User = new mongoose.model("User", userSchema);
 
 passport.use(User.createStrategy());  // 5) pastport 선언
 
-passport.serializeUser(User.serializeUser());         // 6) 쿠키 생성(serial~~) 및 쿠키 파괴(deser~~)
-passport.deserializeUser(User.deserializeUser());
+// passport.serializeUser(User.serializeUser());         // 6) 쿠키 생성(serial~~) 및 쿠키 제거(deser~~)
+// passport.deserializeUser(User.deserializeUser());
+passport.serializeUser(function(user, done) {         //  OAuth 추가3. 쿠키 생성 및 제거를 passport api 어디에서나 쓸 수 있음. 위 코드보다 뛰어남
+  done(null, user.id);
+});
+passport.deserializeUser(function(id, done) {
+  User.findById(id, function(err, user) {
+    done(err, user);
+  });
+});
+
+
+
+passport.use(new GoogleStrategy({               // OAuth 2.
+    clientID: process.env.client_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/google/secrets"
+    // useProfileURL: "http://www.googleapis.com/oauth2/v3/userinfo"    //google+ 지원이 끊기면 사용
+  },
+  function(accessToken, refreshToken, profile, cb) {      //OAuth 5(참고). 구글 로그인된 후 콜백되는 부분
+    console.log(profile);
+    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+      return cb(err, user);
+    });
+  }
+));
 
 app.get("/", function(req,res){
   res.render("home");
 });
+
+app.get("/auth/google",               // OAuth 3. google 로그인을 위한 팝업을 호출함
+  passport.authenticate('google', { scope: ["profile"] })
+);
+
+app.get("/auth/google/secrets",       // OAuth 4. google 로그인에서 인증하고 나면 호출됨
+  passport.authenticate('google', { failureRedirect: '/login' }),
+  function(req, res) {
+    // Successful authentication, redirect home.
+    res.redirect('/secrets');
+  });
 
 app.get("/login", function(req,res){
   res.render("login");
@@ -84,29 +123,6 @@ app.post("/register", function(req, res){
   });
 
 });
-
-// app.post("/login", function(req, res){
-//
-//   const user = new User({                 // 13-1) user에 id, pw를 저장
-//     username: req.body.username,
-//     password: req.body.password
-//   });
-//
-//   req.login(user, function(err){          // 13-2) passport 이용하여 로그인
-//     if (err) {
-//       console.log(err);
-//     } else {
-//       // passport.authenticate("local", { failureRedirect: '/login' })(req, res, function(){      // 11-1) 과 같음
-//       //   res.redirect("/secrets");
-//       // });
-//       passport.authenticate("local", { failureRedirect: '/login' }) {
-//         req, res, function() {      // 11-1) 과 같음
-//           res.redirect("/secrets");
-//         };
-//       }
-//     }
-//   });
-// });
 
 app.post("/login", function(req, res){
 
