@@ -31,12 +31,13 @@ mongoose.connect("mongodb://localhost:27017/userDB", {
   useNewUrlParser: true,
   useUnifiedTopology: true
 });
-mongoose.set("useCreateIndex", true);  // 7) 버전업으로 인해 추가된 사항
+mongoose.set("useCreateIndex", true);  // 7) 몽구스 버전업으로 인해 추가된 사항
 
 const userSchema = new mongoose.Schema ({
   email: String,
   password: String,
-  googleId: String                      // OAuth 추가4.
+  googleId: String,                      // OAuth 추가4.
+  secret: String                         // 23) 데이터 추가를 위한 스키마
 });
 
 userSchema.plugin(passportLocalMongoose);     // 4) 스키마에 passportLocalMongoose 플러그인 추가
@@ -96,12 +97,51 @@ app.get("/register", function(req,res){
   res.render("register");
 });
 
-app.get("/secrets", function(req, res){   // 12) secrets 페이지의 로그인 상태 확인
+// app.get("/secrets", function(req, res){   // 12) secrets 페이지의 로그인 상태 확인
+//   if (req.isAuthenticated()){
+//     res.render("secrets");
+//   } else {
+//     res.redirect("/login");
+//   }
+// });
+app.get("/secrets", function(req, res){     // 24) 로그인 여부 상관 없는 페이지이므로 변경
+  // DB에 null이 아닌 데이터 찾기  {$ne: null} => not equals to null
+  User.find({"secret": {$ne: null}}, function(err, foundUser){
+    if (err){
+      console.log(err);
+    } else {
+      if (foundUser) {
+        res.render("secrets", {usersWithSecrets: foundUser});
+      }
+    }
+  })
+});
+
+app.get("/submit", function(req, res){    // 21) 데이터 입력 페이지 접근 (로그인 여부 중요)
   if (req.isAuthenticated()){
-    res.render("secrets");
+    res.render("submit");
   } else {
     res.redirect("/login");
   }
+});
+
+app.post("/submit", function(req, res){   // 22) 입력된 데이터를 서버로 보냄
+  const submittedSecret = req.body.secret;
+
+  console.log(req.user);            // 유저 정보 열람
+
+  User.findById(req.user.id, function(err, foundUser){
+    if (err) {
+      console.log(err);
+    } else {
+      if (foundUser) {
+        foundUser.secret = submittedSecret;
+        foundUser.save(function(){
+          res.redirect("/secrets")
+        });
+      }
+    }
+  });
 });
 
 app.get("/logout", function(req, res){      // 14) 로그아웃
